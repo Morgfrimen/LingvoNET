@@ -1,293 +1,320 @@
 ﻿using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
-using System.Linq;
 using System.Reflection;
 using System.Text;
-using System.Text.RegularExpressions;
 
-namespace LingvoNET
+namespace LingvoNET;
+
+/// <summary>
+///     Словарь существительных
+/// </summary>
+public static class Nouns
 {
-    /// <summary>
-    /// Словарь существительных
-    /// </summary>
-    public static class Nouns
+    private static readonly List<NounRaw> items = new();
+    internal static readonly Schemas schemas = new();
+
+    private static bool Initialized;
+
+    public static event EventHandler<BeforeFindSimilarNounEventArgs> BeforeFindSimilar;
+    public static event EventHandler<AfterFindSimilarNounEventArgs> AfterFindSimilar;
+    public static event EventHandler<CustomWordsNeededEventArgs> CustomWordsNeeded;
+
+    public static void Init()
     {
-        private readonly static List<NounRaw> items = new List<NounRaw>();
-        internal readonly static Schemas schemas = new Schemas();
+        Initialized = true;
 
-        public static event EventHandler<BeforeFindSimilarNounEventArgs> BeforeFindSimilar;
-        public static event EventHandler<AfterFindSimilarNounEventArgs> AfterFindSimilar;
-        public static event EventHandler<CustomWordsNeededEventArgs> CustomWordsNeeded;
+        schemas.BeginInit();
+        items.Clear();
 
-        private static bool Initialized;
+        var assembly = Assembly.GetExecutingAssembly();
+        var resourceName = "LingvoNET.Dict.сущ.bin";
 
-        public static void Init()
+        using (var stream = assembly.GetManifestResourceStream(resourceName))
+        using (var zip = new GZipStream(stream, CompressionMode.Decompress))
+        using (var sr = new StreamReader(zip, Encoding.GetEncoding(1251)))
         {
-            Initialized = true;
-
-            schemas.BeginInit();
-            items.Clear();
-
-            var assembly = Assembly.GetExecutingAssembly();
-            var resourceName = "LingvoNET.Dict.сущ.bin";
-
-            using (var stream = assembly.GetManifestResourceStream(resourceName))
-            using (var zip = new GZipStream(stream, CompressionMode.Decompress))
-            using (var sr = new StreamReader(zip, Encoding.GetEncoding(1251)))
-            while (sr.Peek() >= 0) 
+            while (sr.Peek() >= 0)
             {
                 var line = sr.ReadLine();
                 if (!string.IsNullOrEmpty(line))
                     items.Add(ParseNoun(line));
             }
+        }
 
-            //additional custom words
-            if (CustomWordsNeeded != null)
-            {
-                var ea = new CustomWordsNeededEventArgs() { CustomWords = new List<string>() };
-                CustomWordsNeeded(null, ea);
+        //additional custom words
+        if (CustomWordsNeeded != null)
+        {
+            var ea = new CustomWordsNeededEventArgs { CustomWords = new List<string>() };
+            CustomWordsNeeded(null, ea);
 
-                var comparer = new StringReverseComparer<NounRaw>();
+            var comparer = new StringReverseComparer<NounRaw>();
 
-                foreach (var line in ea.CustomWords)
-                    if (!string.IsNullOrEmpty(line))
+            foreach (var line in ea.CustomWords)
+                if (!string.IsNullOrEmpty(line))
+                {
+                    var v = ParseNoun(line);
+
+                    var i = items.BinarySearch(v, comparer);
+                    if (i >= 0 && i < items.Count)
                     {
-                        var v = ParseNoun(line);
-
-                        var i = items.BinarySearch(v, comparer);
-                        if (i >= 0 && i < items.Count)
-                        {
-                            items[i] = v;
-                        }
-                        else
-                        {
-                            i = -i - 1;
-                            items.Insert(i, v);
-                        }
+                        items[i] = v;
                     }
-            }
-
-            schemas.EndInit();
+                    else
+                    {
+                        i = -i - 1;
+                        items.Insert(i, v);
+                    }
+                }
         }
 
-        static NounRaw ParseNoun(string line)
+        schemas.EndInit();
+    }
+
+    private static NounRaw ParseNoun(string line)
+    {
+        var parts = line.Split('\t');
+
+        var wordStr = parts[0];
+        var genStr = parts[1];
+        var schemaStr = parts[2];
+
+        var noun = new NounRaw();
+        noun.Word = wordStr;
+        switch (genStr)
         {
-            var parts = line.Split('\t');
+            case "м":
+                noun.Gender = Gender.M;
+                break;
+            case "ж":
+                noun.Gender = Gender.F;
+                break;
+            case "с":
+                noun.Gender = Gender.N;
+                break;
+            case "мо":
+                noun.Gender = Gender.MA;
+                break;
+            case "жо":
+                noun.Gender = Gender.FA;
+                break;
+            case "со":
+                noun.Gender = Gender.NA;
+                break;
+            case "мо-жо":
+                noun.Gender = Gender.MAFA;
+                break;
+            case "мн":
+                noun.Gender = Gender.P;
+                break;
+            default:
+                noun.Gender = Gender.Undefined;
+                break;
+        }
 
-            var wordStr = parts[0];
-            var genStr = parts[1];
-            var schemaStr = parts[2];
+        noun.SchemaIndex = schemas.GetOrAddSchemaId(schemaStr);
 
-            var noun = new NounRaw();
-            noun.Word = wordStr;
-            switch(genStr)
+        return noun;
+    }
+
+    /// <summary>
+    ///     Поиск по точному или приблизительному совпадению
+    /// </summary>
+    public static Noun FindSimilar(string sourceForm, Gender gender = Gender.Undefined,
+        Animacy animacy = Animacy.Undefined)
+    {
+        var searchWord = PrepareWord(sourceForm);
+
+        object tag = null;
+        OnBeforeFindSimilar(ref sourceForm, ref gender, ref animacy, ref searchWord, ref tag);
+
+        var res = items.FindSimilar(new NounRaw { Word = searchWord }, new StringReverseComparer<NounRaw>(),
+            PrepareFilter(gender, animacy));
+
+        Noun result = null;
+
+        if (res.Word != null)
+            result = new Noun
             {
-                case "м": noun.Gender = Gender.M; break;
-                case "ж": noun.Gender = Gender.F; break;
-                case "с": noun.Gender = Gender.N; break;
-                case "мо": noun.Gender = Gender.MA; break;
-                case "жо": noun.Gender = Gender.FA; break;
-                case "со": noun.Gender = Gender.NA; break;
-                case "мо-жо": noun.Gender = Gender.MAFA; break;
-                case "мн": noun.Gender = Gender.P; break;
-                default: noun.Gender = Gender.Undefined; break;
-            }
+                Word = sourceForm,
+                Gender = res.Gender,
+                SchemaIndex = res.SchemaIndex,
+                Inexact = res.Word != searchWord
+            };
 
-            noun.SchemaIndex = schemas.GetOrAddSchemaId(schemaStr);
+        OnAfterFindSimilar(result, sourceForm, searchWord, tag);
 
-            return noun;
-        }
+        return result;
+    }
 
-        /// <summary>
-        /// Поиск по точному или приблизительному совпадению
-        /// </summary>
-        public static Noun FindSimilar(string sourceForm, Gender gender = Gender.Undefined, Animacy animacy = Animacy.Undefined)
+    private static void OnAfterFindSimilar(Noun result, string sourceForm, string searchWord, object tag)
+    {
+        if (AfterFindSimilar != null)
         {
-            var searchWord = PrepareWord(sourceForm);
-
-            object tag = null;
-            OnBeforeFindSimilar(ref sourceForm, ref gender, ref animacy, ref searchWord, ref tag);
-
-            var res = items.FindSimilar(new NounRaw() { Word = searchWord }, new StringReverseComparer<NounRaw>(), PrepareFilter(gender, animacy));
-
-            Noun result = null;
-
-            if (res.Word != null)
-                result = new Noun { Word = sourceForm, Gender = res.Gender, SchemaIndex = res.SchemaIndex, Inexact = res.Word != searchWord };
-
-            OnAfterFindSimilar(result, sourceForm, searchWord, tag);
-
-            return result;
-        }
-
-        private static void OnAfterFindSimilar(Noun result, string sourceForm, string searchWord, object tag)
-        {
-            if (AfterFindSimilar != null)
-            {
-                var args = new AfterFindSimilarNounEventArgs {PreparedForm = searchWord, SourceForm = sourceForm, Tag = tag, Result = result };
-                AfterFindSimilar(null, args);
-                result = args.Result;
-                sourceForm = args.SourceForm;
-                searchWord = args.PreparedForm;
-                tag = args.Tag;
-            }
-        }
-
-        private static void OnBeforeFindSimilar(ref string sourceForm, ref Gender gender, ref Animacy animacy, ref string searchWord, ref object tag)
-        {
-            if (BeforeFindSimilar != null)
-            {
-                var args = new BeforeFindSimilarNounEventArgs {Animacy = animacy, Gender = gender, PreparedForm = searchWord, SourceForm = sourceForm, Tag = tag};
-                BeforeFindSimilar(null, args);
-                animacy = args.Animacy;
-                gender = args.Gender;
-                sourceForm = args.SourceForm;
-                searchWord = args.PreparedForm;
-                tag = args.Tag;
-            }
-        }
-
-        /// <summary>
-        /// Поиск по точному или приблизительному совпадению
-        /// </summary>
-        public static Noun FindSimilar(string sourceForm, Predicate<Noun> filter)
-        {
-            var searchWord = PrepareWord(sourceForm);
-
-            var res = items.FindSimilar(new NounRaw() { Word = searchWord }, new StringReverseComparer<NounRaw>(), (item) => filter(new Noun(item, item.Word)));
-            if (res.Word == null)
-                return null;
-            return new Noun { Word = sourceForm, SchemaIndex = res.SchemaIndex, Gender = res.Gender, Inexact = res.Word != searchWord };
-        }
-
-        /// <summary>
-        /// Поиск одного точного совпадения. Null - если не найдено.
-        /// </summary>
-        public static Noun FindOne(string sourceForm, Gender gender = Gender.Undefined, Animacy animacy = Animacy.Undefined)
-        {
-            var searchWord = PrepareWord(sourceForm);
-
-            var res = items.FindOne(new NounRaw() { Word = searchWord }, new StringReverseComparer<NounRaw>(), PrepareFilter(gender, animacy));
-            if (res.Word == null)
-                return null;
-            return new Noun(res, sourceForm);
-        }
-
-        /// <summary>
-        /// Поиск всех точных совпадений(омонимов).
-        /// </summary>
-        public static IEnumerable<Noun> FindAll(string sourceForm)
-        {
-            var searchWord = PrepareWord(sourceForm);
-
-            foreach (var res in items.FindAll(new NounRaw() { Word = searchWord }, new StringReverseComparer<NounRaw>()))
-                yield return new Noun(res, sourceForm);
-        }
-
-        private static Predicate<NounRaw> PrepareFilter(Gender gender, Animacy animacy)
-        {
-            if (gender != Gender.Undefined) return (item) => item.Gender == gender;
-            if (animacy != Animacy.Undefined) return (item) => item.Gender.Animacy() == animacy;
-            return (item) => true;
-        }
-
-        private static string PrepareWord(string sourceForm)
-        {
-            if (!Initialized)
-                Init();
-
-            var searchWord = sourceForm.ToLowerInvariant();
-            return searchWord;
-        }
-
-        /// <summary>
-        /// Возвращает все слова
-        /// </summary>
-        public static IEnumerable<Noun> GetAll()
-        {
-            if (!Initialized)
-                Init();
-
-            foreach (var raw in items)
-                yield return new Noun(raw, raw.Word);
+            var args = new AfterFindSimilarNounEventArgs
+            { PreparedForm = searchWord, SourceForm = sourceForm, Tag = tag, Result = result };
+            AfterFindSimilar(null, args);
+            result = args.Result;
+            sourceForm = args.SourceForm;
+            searchWord = args.PreparedForm;
+            tag = args.Tag;
         }
     }
 
-    internal struct NounRaw
+    private static void OnBeforeFindSimilar(ref string sourceForm, ref Gender gender, ref Animacy animacy,
+        ref string searchWord, ref object tag)
     {
-        public string Word;
-        public Gender Gender;
-        public int SchemaIndex;
-
-        public override string ToString()
+        if (BeforeFindSimilar != null)
         {
-            return Word;
+            var args = new BeforeFindSimilarNounEventArgs
+            { Animacy = animacy, Gender = gender, PreparedForm = searchWord, SourceForm = sourceForm, Tag = tag };
+            BeforeFindSimilar(null, args);
+            animacy = args.Animacy;
+            gender = args.Gender;
+            sourceForm = args.SourceForm;
+            searchWord = args.PreparedForm;
+            tag = args.Tag;
         }
     }
 
     /// <summary>
-    /// Существительное и его словоформы
+    ///     Поиск по точному или приблизительному совпадению
     /// </summary>
-    public class Noun
+    public static Noun FindSimilar(string sourceForm, Predicate<Noun> filter)
     {
-        internal int SchemaIndex;
+        var searchWord = PrepareWord(sourceForm);
 
-        /// <summary>
-        /// Исходная форма
-        /// </summary>
-        public string Word { get; internal set;}
-        /// <summary>
-        /// Род, число, одушевленность
-        /// </summary>
-        public Gender Gender { get; internal set;}
-        /// <summary>
-        /// Результат не точен и был получен по похожему слову
-        /// </summary>
-        public bool Inexact { get; internal set; }
+        var res = items.FindSimilar(new NounRaw { Word = searchWord }, new StringReverseComparer<NounRaw>(),
+            item => filter(new Noun(item, item.Word)));
+        if (res.Word == null)
+            return null;
+        return new Noun
+        { Word = sourceForm, SchemaIndex = res.SchemaIndex, Gender = res.Gender, Inexact = res.Word != searchWord };
+    }
 
-        internal Noun(NounRaw raw, string word)
+    /// <summary>
+    ///     Поиск одного точного совпадения. Null - если не найдено.
+    /// </summary>
+    public static Noun FindOne(string sourceForm, Gender gender = Gender.Undefined, Animacy animacy = Animacy.Undefined)
+    {
+        var searchWord = PrepareWord(sourceForm);
+
+        var res = items.FindOne(new NounRaw { Word = searchWord }, new StringReverseComparer<NounRaw>(),
+            PrepareFilter(gender, animacy));
+        if (res.Word == null)
+            return null;
+        return new Noun(res, sourceForm);
+    }
+
+    /// <summary>
+    ///     Поиск всех точных совпадений(омонимов).
+    /// </summary>
+    public static IEnumerable<Noun> FindAll(string sourceForm)
+    {
+        var searchWord = PrepareWord(sourceForm);
+
+        foreach (var res in items.FindAll(new NounRaw { Word = searchWord }, new StringReverseComparer<NounRaw>()))
+            yield return new Noun(res, sourceForm);
+    }
+
+    private static Predicate<NounRaw> PrepareFilter(Gender gender, Animacy animacy)
+    {
+        if (gender != Gender.Undefined) return item => item.Gender == gender;
+        if (animacy != Animacy.Undefined) return item => item.Gender.Animacy() == animacy;
+        return item => true;
+    }
+
+    private static string PrepareWord(string sourceForm)
+    {
+        if (!Initialized)
+            Init();
+
+        var searchWord = sourceForm.ToLowerInvariant();
+        return searchWord;
+    }
+
+    /// <summary>
+    ///     Возвращает все слова
+    /// </summary>
+    public static IEnumerable<Noun> GetAll()
+    {
+        if (!Initialized)
+            Init();
+
+        foreach (var raw in items)
+            yield return new Noun(raw, raw.Word);
+    }
+}
+
+internal struct NounRaw
+{
+    public string Word;
+    public Gender Gender;
+    public int SchemaIndex;
+
+    public override string ToString()
+    {
+        return Word;
+    }
+}
+
+/// <summary>
+///     Существительное и его словоформы
+/// </summary>
+public class Noun
+{
+    internal int SchemaIndex;
+
+    internal Noun(NounRaw raw, string word)
+    {
+        Word = word;
+        if (raw.Word != null)
         {
-            this.Word = word;
-            if(raw.Word != null)
-            {
-                Gender = raw.Gender;
-                SchemaIndex = raw.SchemaIndex;
-            }
-        }
-
-        public Noun()
-        {
-        }
-
-        /// <summary>
-        /// Словоформы по падежам и числам
-        /// </summary>
-        public string this[Case @case, Number number = Number.Singular]
-        {
-            get
-            {
-                return Nouns.schemas[SchemaIndex].GetForm(Word, (int)@case + 6 * (int)number);
-            }
+            Gender = raw.Gender;
+            SchemaIndex = raw.SchemaIndex;
         }
     }
 
-    public class BeforeFindSimilarNounEventArgs : EventArgs
+    public Noun()
     {
-        public string SourceForm { get; set; }
-        public string PreparedForm { get; set; }
-        public Gender Gender { get; set; }
-        public Animacy Animacy { get; set; }
-        public object Tag;
     }
 
-    public class AfterFindSimilarNounEventArgs : EventArgs
-    {
-        public string SourceForm { get; set; }
-        public string PreparedForm { get; set; }
-        public Noun Result;
-        public object Tag;
-    }
+    /// <summary>
+    ///     Род, число, одушевленность
+    /// </summary>
+    public Gender Gender { get; internal set; }
+
+    /// <summary>
+    ///     Результат не точен и был получен по похожему слову
+    /// </summary>
+    public bool Inexact { get; internal set; }
+
+    /// <summary>
+    ///     Словоформы по падежам и числам
+    /// </summary>
+    public string this[Case @case, Number number = Number.Singular] =>
+        Nouns.schemas[SchemaIndex].GetForm(Word, (int)@case + 6 * (int)number);
+
+    /// <summary>
+    ///     Исходная форма
+    /// </summary>
+    public string Word { get; internal set; }
+}
+
+public class BeforeFindSimilarNounEventArgs : EventArgs
+{
+    public object Tag;
+    public Animacy Animacy { get; set; }
+    public Gender Gender { get; set; }
+    public string PreparedForm { get; set; }
+    public string SourceForm { get; set; }
+}
+
+public class AfterFindSimilarNounEventArgs : EventArgs
+{
+    public Noun Result;
+    public object Tag;
+    public string PreparedForm { get; set; }
+    public string SourceForm { get; set; }
 }
