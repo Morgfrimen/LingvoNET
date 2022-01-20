@@ -348,8 +348,8 @@ namespace LingvoNET
                 case VerbAspect.Perfect: return this[voice, person, number];
                 case VerbAspect.Imperfect:
                 case VerbAspect.PerfectImperfect:
-                    if (Transition == VerbTransition.Transitive || voice == Voice.Active)
-                        return Verbs.ToBe[Voice.Active, person, number].ToUpper(Word) + " " + Infinitive(voice).ToLower();
+                    if ((Transition == VerbTransition.Transitive || voice == Voice.Active) && Verbs.ToBe is not null) //TODO: Error - ToBe is null
+                        return Verbs.ToBe[Voice.Active, person, number]?.ToUpper(Word) + " " + Infinitive(voice)?.ToLower();
                     else 
                         return null;
             }
