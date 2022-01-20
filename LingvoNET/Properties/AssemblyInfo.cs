@@ -4,11 +4,11 @@ using System.Runtime.InteropServices;
 // General Information about an assembly is controlled through the following 
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
-[assembly: AssemblyTitle("LingvoNET - Declension and conjugation for Russian language")]
+[assembly: AssemblyTitle("LingvoNETCore - Declension and conjugation for Russian language")]
 [assembly: AssemblyDescription("")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("Pavel Torgashov, p_torgashov@ukr.net")]
-[assembly: AssemblyProduct("LingvoNET")]
+[assembly: AssemblyProduct("LingvoNETCore")]
 [assembly: AssemblyCopyright("© Pavel Torgashov, 2014-2016, p_torgashov@ukr.net")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]

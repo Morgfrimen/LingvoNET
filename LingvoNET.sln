@@ -5,7 +5,7 @@ VisualStudioVersion = 17.0.32112.339
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TesterLingvoNET", "Tester\TesterLingvoNET.csproj", "{8220D2D3-38D9-439C-AB90-31DAC578B527}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "LingvoNET", "LingvoNET\LingvoNET.csproj", "{FC93B545-7968-4B97-94DA-09CBC00E3F78}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "LingvoNETCore", "LingvoNET\LingvoNETCore.csproj", "{FC93B545-7968-4B97-94DA-09CBC00E3F78}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

@@ -16,7 +16,7 @@ public static class Pronouns
     static Pronouns()
     {
         var assembly = Assembly.GetExecutingAssembly();
-        var resourceName = "LingvoNET.Dict.мест.bin";
+        var resourceName = "LingvoNETCore.Dict.мест.bin";
 
         using (var stream = assembly.GetManifestResourceStream(resourceName))
         using (var zip = new GZipStream(stream, CompressionMode.Decompress))

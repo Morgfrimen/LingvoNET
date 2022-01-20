@@ -17,11 +17,11 @@
     <PackageReference Include="Microsoft.Windows.Compatibility" Version="6.0.0" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\LingvoNET\LingvoNET.csproj" />
+    <ProjectReference Include="..\LingvoNET\LingvoNETCore.csproj" />
   </ItemGroup>
-  <PropertyGroup>
+  <!--<PropertyGroup>
     <PostBuildEvent>copy "$(TargetDir)Tester.exe" "$(SolutionDir)Binary"
 copy "$(TargetDir)*.dll" "$(SolutionDir)Binary"
 copy "$(TargetDir)*.xml" "$(SolutionDir)Binary"</PostBuildEvent>
-  </PropertyGroup>
+  </PropertyGroup>-->
 </Project>

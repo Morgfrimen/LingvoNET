@@ -33,7 +33,7 @@ public static class Verbs
         items.Clear();
 
         var assembly = Assembly.GetExecutingAssembly();
-        var resourceName = "LingvoNET.Dict.глаголы.bin";
+        var resourceName = "LingvoNETCore.Dict.глаголы.bin";
 
         using (var stream = assembly.GetManifestResourceStream(resourceName))
         using (var zip = new GZipStream(stream, CompressionMode.Decompress))
@@ -76,7 +76,7 @@ public static class Verbs
         schemas.EndInit();
 
         //загружаем пары несоверш-соверш
-        resourceName = "LingvoNET.Dict.ImperfectPerfect.bin";
+        resourceName = "LingvoNETCore.Dict.ImperfectPerfect.bin";
 
         using (var stream = assembly.GetManifestResourceStream(resourceName))
         using (var zip = new GZipStream(stream, CompressionMode.Decompress))

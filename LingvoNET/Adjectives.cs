@@ -21,7 +21,7 @@ public static class Adjectives
         items.Clear();
 
         var assembly = Assembly.GetExecutingAssembly();
-        var resourceName = "LingvoNET.Dict.прилаг.bin";
+        var resourceName = "LingvoNETCore.Dict.прилаг.bin";
 
         using (var stream = assembly.GetManifestResourceStream(resourceName))
         using (var zip = new GZipStream(stream, CompressionMode.Decompress))

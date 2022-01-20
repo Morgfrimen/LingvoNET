@@ -29,7 +29,7 @@ public static class Nouns
         items.Clear();
 
         var assembly = Assembly.GetExecutingAssembly();
-        var resourceName = "LingvoNET.Dict.сущ.bin";
+        var resourceName = "LingvoNETCore.Dict.сущ.bin";
 
         using (var stream = assembly.GetManifestResourceStream(resourceName))
         using (var zip = new GZipStream(stream, CompressionMode.Decompress))
